@@ -21,3 +21,10 @@
     <init>(android.app.Application);
 }
 -keepnames class moe.shizuku.api.BinderContainer
+
+# IBinder#getExtension is invoked reflectively by the OEM framework
+# (e.g. ColorOS OplusPackageManager). Keep our override or it'll be
+# stripped and fall through to IBinder's default impl, which throws.
+-keepclassmembers class * extends rikka.shizuku.ShizukuBinderWrapper {
+    public android.os.IBinder getExtension();
+}

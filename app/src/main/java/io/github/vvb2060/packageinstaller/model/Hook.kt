@@ -14,7 +14,9 @@ import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Parcel
 import android.os.Process
+import android.os.RemoteException
 import android.provider.Settings
 import android.system.Os
 import androidx.annotation.RequiresApi
@@ -22,6 +24,25 @@ import org.lsposed.hiddenapibypass.LSPass
 import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuBinderWrapper
 import rikka.shizuku.SystemServiceHelper
+
+private const val EXTENSION_TRANSACTION =
+    ('_'.code shl 24) or ('E'.code shl 16) or ('X'.code shl 8) or 'T'.code
+
+private class ExtBinderWrapper(original: IBinder) : ShizukuBinderWrapper(original) {
+    @Throws(RemoteException::class)
+    fun getExtension(): IBinder? {
+        val data = Parcel.obtain()
+        val reply = Parcel.obtain()
+        try {
+            transact(EXTENSION_TRANSACTION, data, reply, 0)
+            val extension = reply.readStrongBinder()
+            return extension?.let { ExtBinderWrapper(it) }
+        } finally {
+            reply.recycle()
+            data.recycle()
+        }
+    }
+}
 
 object Hook {
     private var hooked = false
@@ -37,7 +58,7 @@ object Hook {
         if (hooked) return
 
         val ibinder = SystemServiceHelper.getSystemService(Context.ACTIVITY_SERVICE)
-        am = IActivityManager.Stub.asInterface(ShizukuBinderWrapper(ibinder))
+        am = IActivityManager.Stub.asInterface(ExtBinderWrapper(ibinder))
 
         pm = context.packageManager
         var contextImpl = context
@@ -58,19 +79,19 @@ object Hook {
         ActivityThread::class.java.getDeclaredField("sPackageManager").apply {
             isAccessible = true
             val sPackageManager = get(null) as IPackageManager
-            val wrapper = ShizukuBinderWrapper(sPackageManager.asBinder())
+            val wrapper = ExtBinderWrapper(sPackageManager.asBinder())
             set(null, IPackageManager.Stub.asInterface(wrapper))
         }
         pm::class.java.getDeclaredField("mPM").apply {
             isAccessible = true
             val mPM = get(pm) as IPackageManager
-            val wrapper = ShizukuBinderWrapper(mPM.asBinder())
+            val wrapper = ExtBinderWrapper(mPM.asBinder())
             set(pm, IPackageManager.Stub.asInterface(wrapper))
         }
         installer::class.java.getDeclaredField("mInstaller").apply {
             isAccessible = true
             val mInstaller = get(installer) as IPackageInstaller
-            val wrapper = ShizukuBinderWrapper(mInstaller.asBinder())
+            val wrapper = ExtBinderWrapper(mInstaller.asBinder())
             set(installer, IPackageInstaller.Stub.asInterface(wrapper))
         }
         hooked = true
@@ -88,7 +109,7 @@ object Hook {
         provider::class.java.getDeclaredField("mRemote").run {
             isAccessible = true
             val binder = get(provider) as IBinder
-            val wrapper = ShizukuBinderWrapper(binder)
+            val wrapper = ExtBinderWrapper(binder)
             set(provider, wrapper)
             callback.run()
             set(provider, binder)
@@ -99,7 +120,7 @@ object Hook {
         return this::class.java.getDeclaredField("mSession").run {
             isAccessible = true
             val mSession = get(this@wrap) as IPackageInstallerSession
-            val wrapper = ShizukuBinderWrapper(mSession.asBinder())
+            val wrapper = ExtBinderWrapper(mSession.asBinder())
             set(this@wrap, IPackageInstallerSession.Stub.asInterface(wrapper))
         }
     }
