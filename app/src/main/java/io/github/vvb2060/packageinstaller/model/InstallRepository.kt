@@ -55,11 +55,7 @@ class InstallRepository(private val context: Application) {
     private var apkLite: ApkLite? = null
 
     fun preCheck(intent: Intent): Boolean {
-        if (!Shizuku.pingBinder()
-            || Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED
-            || Shizuku.checkRemotePermission(Manifest.permission.INSTALL_PACKAGES)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (!isShizukuReady()) {
             installResult.value = InstallAborted(
                 ABORT_SHIZUKU,
                 context.packageManager.getLaunchIntentForPackage(
@@ -80,6 +76,18 @@ class InstallRepository(private val context: Application) {
 
         installResult.value = InstallParse()
         return true
+    }
+
+    // Shizuku stores the binder before attachApplication returns, so a check made
+    // right after the binder arrives can throw "Not an attached client".
+    private fun isShizukuReady() = try {
+        Shizuku.pingBinder()
+            && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
+            && Shizuku.checkRemotePermission(Manifest.permission.INSTALL_PACKAGES) ==
+            PackageManager.PERMISSION_GRANTED
+    } catch (e: RuntimeException) {
+        Log.w(TAG, "Shizuku not ready", e)
+        false
     }
 
     fun parseUri() {

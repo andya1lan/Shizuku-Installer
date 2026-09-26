@@ -45,8 +45,12 @@ public class InstallErrorFragment extends BaseDialogFragment {
 
     private void checkShizuku(Context context) {
         if (Shizuku.pingBinder()) {
-            Shizuku.requestPermission(1);
-            return;
+            try {
+                Shizuku.requestPermission(1);
+                return;
+            } catch (RuntimeException ignored) {
+                // Not attached yet, open Shizuku instead
+            }
         }
         var intent = mAborted.getIntent();
         if (intent == null) {
@@ -66,11 +70,14 @@ public class InstallErrorFragment extends BaseDialogFragment {
                         return context.getString(R.string.error_shizuku_notrunning);
                     }
                 }
-                if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-                    return context.getString(R.string.error_shizuku_notpermitted);
-                } else {
-                    return context.getString(R.string.error_shizuku_unavailable);
+                try {
+                    if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+                        return context.getString(R.string.error_shizuku_notpermitted);
+                    }
+                } catch (RuntimeException ignored) {
+                    // The binder has just arrived and attachApplication hasn't finished yet
                 }
+                return context.getString(R.string.error_shizuku_unavailable);
             }
             case InstallAborted.ABORT_INFO -> {
                 return getString(R.string.error_info,
